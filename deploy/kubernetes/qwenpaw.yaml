@@ -39,6 +39,38 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        - name: console-http-compat
+          image: agentscope/qwenpaw:pre@sha256:bae2c8a0d7f937dd42fd1cae6ab2b88109918f200c29a8b1d243e2f5029c6743
+          command:
+            - sh
+            - -ec
+            - |
+              python - <<'PY'
+              from pathlib import Path
+              import shutil
+
+              shutil.copytree("/app/src/qwenpaw/console", "/patched", dirs_exist_ok=True)
+              bundles = list(Path("/patched/assets").glob("index-x-*.js"))
+              assert len(bundles) == 1, f"expected one terminal bundle, found {len(bundles)}"
+              bundle = bundles[0]
+              source = bundle.read_text()
+              assert source.count("crypto.randomUUID()") == 1, "unexpected terminal UUID call"
+              bundle.write_text(source.replace(
+                  "crypto.randomUUID()",
+                  "crypto.randomUUID?.()??Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,\"0\")).join(\"\")",
+              ))
+              PY
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: console-patched
+              mountPath: /patched
       containers:
         - name: qwenpaw
           image: agentscope/qwenpaw:pre@sha256:bae2c8a0d7f937dd42fd1cae6ab2b88109918f200c29a8b1d243e2f5029c6743
@@ -70,6 +102,8 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /app/persistent
+            - name: console-patched
+              mountPath: /app/src/qwenpaw/console
           resources:
             requests:
               cpu: 500m
@@ -99,6 +133,8 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: qwenpaw-data
+        - name: console-patched
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
