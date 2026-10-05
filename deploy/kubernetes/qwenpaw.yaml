@@ -50,7 +50,7 @@ spec:
               from pathlib import Path
               import shutil
 
-              shutil.copytree("/app/src/qwenpaw/console", "/patched", dirs_exist_ok=True)
+              shutil.copytree("/app/venv/lib/python3.11/site-packages/qwenpaw/console", "/patched", dirs_exist_ok=True)
               bundles = list(Path("/patched/assets").glob("index-x-*.js"))
               assert len(bundles) == 1, f"expected one terminal bundle, found {len(bundles)}"
               bundle = bundles[0]
@@ -103,7 +103,7 @@ spec:
             - name: data
               mountPath: /app/persistent
             - name: console-patched
-              mountPath: /app/src/qwenpaw/console
+              mountPath: /app/venv/lib/python3.11/site-packages/qwenpaw/console
           resources:
             requests:
               cpu: 500m
