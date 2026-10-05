@@ -60,6 +60,12 @@ spec:
                   "crypto.randomUUID()",
                   "crypto.randomUUID?.()??Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,\"0\")).join(\"\")",
               ))
+              index = Path("/patched/index.html")
+              html = index.read_text()
+              marker = '<script type="module"'
+              shim = '<script>if(!crypto.randomUUID)Object.defineProperty(crypto,"randomUUID",{value:()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=b[6]&15|64;b[8]=b[8]&63|128;const h=Array.from(b,x=>x.toString(16).padStart(2,"0")).join("");return h.slice(0,8)+"-"+h.slice(8,12)+"-"+h.slice(12,16)+"-"+h.slice(16,20)+"-"+h.slice(20)}})</script>'
+              assert marker in html, "console module script not found"
+              index.write_text(html.replace(marker, shim + marker, 1))
               PY
           resources:
             requests:
