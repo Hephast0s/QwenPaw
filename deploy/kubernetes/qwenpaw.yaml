@@ -1,0 +1,133 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: qwenpaw
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qwenpaw-data
+  namespace: qwenpaw
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qwenpaw
+  namespace: qwenpaw
+spec:
+  replicas: 1
+  progressDeadlineSeconds: 1800
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: qwenpaw
+  template:
+    metadata:
+      labels:
+        app: qwenpaw
+    spec:
+      nodeSelector:
+        node-type: worker
+        kubernetes.io/hostname: worker-1
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: qwenpaw
+          image: agentscope/qwenpaw:pre@sha256:bae2c8a0d7f937dd42fd1cae6ab2b88109918f200c29a8b1d243e2f5029c6743
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8088
+          env:
+            - name: QWENPAW_PORT
+              value: "8088"
+            - name: QWENPAW_WORKING_DIR
+              value: /app/persistent/working
+            - name: QWENPAW_SECRET_DIR
+              value: /app/persistent/secret
+            - name: QWENPAW_BACKUP_DIR
+              value: /app/persistent/backups
+            - name: QWENPAW_AUTH_ENABLED
+              value: "true"
+            - name: QWENPAW_AUTH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: qwenpaw-auth
+                  key: username
+            - name: QWENPAW_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: qwenpaw-auth
+                  key: password
+          volumeMounts:
+            - name: data
+              mountPath: /app/persistent
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 3Gi
+          startupProbe:
+            httpGet:
+              path: /api/auth/status
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /api/auth/status
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/auth/status
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: qwenpaw-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qwenpaw
+  namespace: qwenpaw
+spec:
+  selector:
+    app: qwenpaw
+  ports:
+    - name: http
+      port: 8088
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: qwenpaw
+  namespace: qwenpaw
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: qwenpaw.192.168.1.8.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: qwenpaw
+                port:
+                  name: http
